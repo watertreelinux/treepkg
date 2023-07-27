@@ -1,0 +1,89 @@
+#!/bin/sh -e
+
+ROOT=${ROOT:-"/"}
+TREE_DB="${TREE_DB:-/var/lib/db/tree}"
+
+pkg_name=${2##*/}
+pkg_name=${pkg_name%-*-*-*}
+
+make_pkg () {
+	if [ ! -d "var/lib/db/tree/packages/installed/${pkg_name}" ]; then
+		mkdir -v -p "var/lib/db/tree/packages/installed/${pkg_name}"
+	fi
+
+	(
+	find -- * -type d -exec printf "%s/\n" {} +
+	find -- * ! -type d -print
+	) | sort -r > "var/lib/db/tree/packages/installed/${pkg_name}/manifest"
+
+	tar -I "zstd -c -T0 --ultra -20" -cvf "$1" -- *
+}
+
+install_pkg () {
+	tar xvf "$1" -C "$ROOT"
+
+	if [ -f "$ROOT/$TREE_DB/packages/installed/$pkg_name/post-install" ]; then
+		printf "\nExecuting post-install scripts.\n\n"
+		"$ROOT/$TREE_DB/packages/installed/$pkg_name/post-install"
+	fi
+}
+
+remove_pkg () {
+	while IFS= read -r file; do
+		case "$file" in etc/*)
+			printf "Skipping %s\n" "$file"
+			continue
+		esac
+
+		file=$ROOT/$file
+
+		# Remove files
+		if [ -f "$file" ] && [ ! -h "$file" ]; then
+		    rm -f "$file"
+
+		# Remove file symlinks.
+		elif [ -h "$file" ] && [ ! -d "$file" ]; then
+		    rm -f "$file"
+
+		# Remove directories if empty.
+		elif [ -d "$file" ] && [ ! -h "$file" ]; then
+		    rmdir "$file" 2>/dev/null ||:
+		fi
+	done < "$ROOT/$TREE_DB/packages/installed/${pkg_name}/manifest"
+}
+
+upgrade_pkg () {
+	if [ ! -d "$ROOT/$TREE_DB/packages/installed/$pkg_name" ]; then
+		install_pkg "$1"
+	else
+		remove_pkg "$pkg_name"
+		install_pkg "$1"
+	fi
+}
+
+search_pkg () {
+	if [ ! -d "$ROOT/$TREE_DB/packages/installed/$pkg_name" ]; then
+		echo "The package $pkg_name does not exist."
+	else
+		echo "$ROOT/$TREE_DB/packages/installed/$pkg_name" 
+	fi
+}
+
+case $1 in
+	make)
+		make_pkg "$2"
+		;;
+	install)
+		install_pkg "$2"
+		;;
+	remove)
+		remove_pkg "$2"
+		;;
+	upgrade)
+		upgrade_pkg "$2"
+		;;
+	search)
+		search_pkg "$2"
+		;;
+esac
+
