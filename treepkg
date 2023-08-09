@@ -70,19 +70,19 @@ search_pkg () {
 }
 
 case $1 in
-	make)
+	make | mk | m)
 		make_pkg "$2"
 		;;
-	install)
+	install | i)
 		install_pkg "$2"
 		;;
-	remove)
+	remove | r)
 		remove_pkg "$2"
 		;;
-	upgrade)
+	upgrade | u)
 		upgrade_pkg "$2"
 		;;
-	search)
+	search | s)
 		search_pkg "$2"
 		;;
 esac
